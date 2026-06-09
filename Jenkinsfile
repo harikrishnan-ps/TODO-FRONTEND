@@ -5,7 +5,7 @@ pipeline {
         CONTAINER_NAME = 'todo-frontend'
         IMAGE_NAME = 'todo-app-frontend'
         NETWORK_NAME = 'todo-network'
-        PORT_MAPPING = '4200:80'
+        PORT_MAPPING = '4201:80'
     }
  
     stages {
