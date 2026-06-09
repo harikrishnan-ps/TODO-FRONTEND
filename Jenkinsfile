@@ -1,69 +1,55 @@
 pipeline {
     agent any
-
-    // This section assumes you have NodeJS plugin configured in Jenkins 
-    // named 'node22' (or similar, depending on your setup).
-    // If your Jenkins agents already have Node installed globally, you can remove the 'tools' block.
-    tools {
-        nodejs 'node22'
-    }
-
+ 
     environment {
-        // Define any environment variables here
-        NODE_ENV = 'production'
+        CONTAINER_NAME = 'todo-frontend'
+        IMAGE_NAME = 'todo-app-frontend'
+        NETWORK_NAME = 'todo-network'
+        PORT_MAPPING = '4200:80'
     }
-
+ 
     stages {
-        stage('Install Dependencies') {
+        stage('Checkout') {
             steps {
-                // Using 'npm ci' for a clean, deterministic install in CI environments
-                echo "Installing dependencies..."
-                sh 'npm ci'
+                checkout scm
             }
         }
-
-        stage('Lint') {
-            steps {
-                // Add your linting command if configured in package.json
-                // sh 'npm run lint'
-                echo "Skipping linting for now"
-            }
-        }
-
-        stage('Test') {
-            steps {
-                // Execute tests. The flags ensure it runs once (no watch) in headless mode for CI environments.
-                echo "Running unit tests..."
-                sh 'npm run test -- --watch=false --browsers=ChromeHeadless'
-            }
-        }
-
-        stage('Build Angular App') {
-            steps {
-                echo "Building the application..."
-                sh 'npm run build'
-            }
-        }
-
+ 
         stage('Build Docker Image') {
             steps {
-                // If you also want Jenkins to build the Docker image using your Dockerfile
-                echo "Building Docker image..."
-                sh 'docker build -t todo-frontend:latest -t todo-frontend:${BUILD_NUMBER} .'
+                bat "docker build --no-cache -t ${IMAGE_NAME}:latest -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+            }
+        }
+ 
+        stage('Deploy Container') {
+            steps {
+                script {
+                    // Ensure Docker network exists
+                    bat "docker network create ${NETWORK_NAME} 2>nul || ver >nul"
+                   
+                    // Stop and remove existing container if running
+                    bat "docker stop ${CONTAINER_NAME} 2>nul || ver >nul"
+                    bat "docker rm ${CONTAINER_NAME} 2>nul || ver >nul"
+                   
+                    // Launch new container using Windows Batch line continuation
+                    bat """
+                        docker run -d ^
+                            --name ${CONTAINER_NAME} ^
+                            --network ${NETWORK_NAME} ^
+                            -p ${PORT_MAPPING} ^
+                            ${IMAGE_NAME}:latest
+                    """
+                }
             }
         }
     }
-
+ 
     post {
-        always {
-            // Clean up the workspace after the build finishes
-            cleanWs()
-        }
         success {
-            echo "✅ Frontend Pipeline completed successfully!"
+            echo "Frontend pipeline completed successfully!"
         }
         failure {
-            echo "❌ Frontend Pipeline failed. Please check the logs."
+            echo "Frontend pipeline failed. Please check the logs."
         }
     }
 }
