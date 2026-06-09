@@ -48,49 +48,126 @@ import { Router } from '@angular/router';
 
         <div class="right-panel">
           <div class="tasks-section">
-            <h2>Pending Tasks ({{ pendingTodos().length }})</h2>
+            <div class="view-toggles">
+              <button 
+                [class.active]="viewMode() === 'pending'" 
+                (click)="setViewMode('pending')" 
+                class="toggle-btn">
+                Pending ({{ pendingTodos().length }})
+              </button>
+              <button 
+                [class.active]="viewMode() === 'completed'" 
+                (click)="setViewMode('completed')" 
+                class="toggle-btn">
+                Completed ({{ completedTodos().length }})
+              </button>
+            </div>
+
             <div class="task-list">
-              <div class="task-card" *ngFor="let todo of pendingTodos()">
+              <div class="task-card" [class.completed]="viewMode() === 'completed'" *ngFor="let todo of paginatedTodos()">
                 <div class="task-content">
-                  <h3>{{ todo.title }}</h3>
-                  <p>{{ todo.description }}</p>
-                  <small>Created: {{ todo.createdAt | date:'short' }}</small>
+                  <h3 *ngIf="viewMode() === 'pending'">{{ todo.title }}</h3>
+                  <h3 *ngIf="viewMode() === 'completed'"><del>{{ todo.title }}</del></h3>
+                  
+                  <p *ngIf="viewMode() === 'pending'">{{ todo.description }}</p>
+                  <p *ngIf="viewMode() === 'completed'"><del>{{ todo.description }}</del></p>
+                  
+                  <small *ngIf="viewMode() === 'pending'">Created: {{ todo.createdAt | date:'short' }}</small>
+                  <small *ngIf="viewMode() === 'completed'">Updated: {{ todo.updatedAt | date:'short' }}</small>
                 </div>
-                <div class="task-actions">
+                
+                <div class="task-actions" *ngIf="viewMode() === 'pending'">
                   <button class="icon-btn success" (click)="completeTodo(todo.id)">✓ Complete</button>
                   <button class="icon-btn warning" (click)="editTodo(todo)">✎ Edit</button>
                   <button class="icon-btn danger" (click)="deleteTodo(todo.id)">✗ Delete</button>
                 </div>
-              </div>
-              <div *ngIf="pendingTodos().length === 0" class="empty-state">
-                <p>No pending tasks. Great job!</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="tasks-section mt-4">
-            <h2>Completed Tasks ({{ completedTodos().length }})</h2>
-            <div class="task-list">
-              <div class="task-card completed" *ngFor="let todo of completedTodos()">
-                <div class="task-content">
-                  <h3><del>{{ todo.title }}</del></h3>
-                  <p><del>{{ todo.description }}</del></p>
-                  <small>Updated: {{ todo.updatedAt | date:'short' }}</small>
-                </div>
-                <div class="task-actions">
+                
+                <div class="task-actions" *ngIf="viewMode() === 'completed'">
                   <button class="icon-btn" (click)="pendingTodo(todo.id)">↺ Revert</button>
                   <button class="icon-btn danger" (click)="deleteTodo(todo.id)">✗ Delete</button>
                 </div>
               </div>
-              <div *ngIf="completedTodos().length === 0" class="empty-state">
-                <p>No completed tasks yet.</p>
+              
+              <div *ngIf="paginatedTodos().length === 0" class="empty-state">
+                <p *ngIf="viewMode() === 'pending'">No pending tasks. Great job!</p>
+                <p *ngIf="viewMode() === 'completed'">No completed tasks yet.</p>
               </div>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="pagination-controls" *ngIf="totalPages() > 0">
+              <button 
+                class="pagination-btn" 
+                [disabled]="currentPage() === 1" 
+                (click)="prevPage()">
+                Back
+              </button>
+              <span>Page {{ currentPage() }} of {{ totalPages() }}</span>
+              <button 
+                class="pagination-btn" 
+                [disabled]="currentPage() === totalPages()" 
+                (click)="nextPage()">
+                Next
+              </button>
             </div>
           </div>
         </div>
       </main>
     </div>
-  `
+  `,
+  styles: [`
+    .view-toggles {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .toggle-btn {
+      flex: 1;
+      padding: 0.75rem;
+      border: 2px solid #e2e8f0;
+      background: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      color: #64748b;
+      transition: all 0.2s ease;
+    }
+    .toggle-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+    .toggle-btn:hover:not(.active) {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    .pagination-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 1.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e2e8f0;
+    }
+    .pagination-btn {
+      padding: 0.5rem 1rem;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      color: #475569;
+      transition: all 0.2s;
+    }
+    .pagination-btn:not(:disabled):hover {
+      background: #e2e8f0;
+      color: #1e293b;
+    }
+    .pagination-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  `]
 })
 export class TodoDashboardComponent implements OnInit {
   authService = inject(AuthService);
@@ -102,8 +179,24 @@ export class TodoDashboardComponent implements OnInit {
   isEditing = signal(false);
   editingId = signal<number | null>(null);
 
+  // Pagination & Filters
+  viewMode = signal<'pending' | 'completed'>('pending');
+  currentPage = signal(1);
+  pageSize = 4;
+
   pendingTodos = computed(() => this.todos().filter(t => !t.isCompleted));
   completedTodos = computed(() => this.todos().filter(t => t.isCompleted));
+  
+  filteredTodos = computed(() => {
+    return this.viewMode() === 'pending' ? this.pendingTodos() : this.completedTodos();
+  });
+
+  totalPages = computed(() => Math.ceil(this.filteredTodos().length / this.pageSize));
+
+  paginatedTodos = computed(() => {
+    const startIndex = (this.currentPage() - 1) * this.pageSize;
+    return this.filteredTodos().slice(startIndex, startIndex + this.pageSize);
+  });
 
   todoForm = this.fb.group({
     title: ['', Validators.required],
@@ -116,9 +209,32 @@ export class TodoDashboardComponent implements OnInit {
 
   loadTodos() {
     this.todoService.getTodos().subscribe({
-      next: (data) => this.todos.set(data),
+      next: (data) => {
+        this.todos.set(data);
+        // Adjust current page if it's out of bounds after data update
+        if (this.currentPage() > this.totalPages() && this.totalPages() > 0) {
+          this.currentPage.set(this.totalPages());
+        }
+      },
       error: (err) => console.error(err)
     });
+  }
+
+  setViewMode(mode: 'pending' | 'completed') {
+    this.viewMode.set(mode);
+    this.currentPage.set(1); // Reset to first page when changing tabs
+  }
+
+  nextPage() {
+    if (this.currentPage() < this.totalPages()) {
+      this.currentPage.set(this.currentPage() + 1);
+    }
+  }
+
+  prevPage() {
+    if (this.currentPage() > 1) {
+      this.currentPage.set(this.currentPage() - 1);
+    }
   }
 
   onSubmit() {
@@ -136,6 +252,10 @@ export class TodoDashboardComponent implements OnInit {
         next: () => {
           this.loadTodos();
           this.todoForm.reset();
+          // Switch to pending view when adding new tasks
+          if (this.viewMode() === 'completed') {
+            this.setViewMode('pending');
+          }
         }
       });
     }
