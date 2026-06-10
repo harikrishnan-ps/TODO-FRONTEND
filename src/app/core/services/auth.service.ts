@@ -7,7 +7,7 @@ import { AuthResponse } from '../models/auth.model';
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:8081/api/auth';
+  private apiUrl = '/api/auth';
   
   isAuthenticated = signal<boolean>(this.hasToken());
   currentUser = signal<{name: string, email: string} | null>(this.getUserFromStorage());
